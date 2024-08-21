@@ -1,1 +1,333 @@
+%% Function to calculate the RoA (Region of Activation) metrics in specified number of ramps (num_rampe) 
+
+%%%% INPUT:
+% - col_bary: time series representing the shift of the barycenter along
+% the horizontal direction of the grid (across columns)
+
+% - row_bary: time series representing the shift of the barycenter along
+% the vertical direction of the grid (across rows)
+
+% -fs: sampling frequency
+
+% -time_sec: indicate the time window  in seconds in which the metric will
+% be averaged
+
+% - num_rampe: define the number of windows in which the metric are
+% averaged. It must include one window at the beginning and one at the end 
+% representing the transient phases of the contraction (on and off) with a
+% duration specified by the last input "transient_wind_sec"
+
+% - transient_wind_sec: specify the initial and final window with a specific
+% time duration such that the transient phase of the contraction is
+% completely captured in this window
+
+% N.B. the shift of some metrics are computed with respect to the
+% coordinate calculate in the first 20% of the contraction. If you want to
+% change it, modify line:
+
+% Example: I have a signal going from 0 to 60 seconds. The transient phases
+% will take the first 4 and the last 4 seconds. I want to compute metrics
+% in window of 5 seconds at the beginning, at 25%, in the middle, at 75% and at the end of
+% the contraction. 
+% I will call the function in this way:
+%  [roa] = computation_metrics_high_density_EMG(col_bary,row_bary,fs,5,7,4)
+% so that num_rampe is 7: 2 for the transient phases (that last four
+% seconds) + 5 different windows lasting five seconds each(that is
+% "time_sec" input).
+
+% I am not doing a check on the total length of the signal to check if the
+% time window ("time_sec") is larger. In that case it won't work.
+
+% Author: Giovanni Corvini
+% 21/08/2024 
+% For any information, write to giovanni.corvini@uniroma3.it
+ 
+%% Funzione per calcolare i parametri del Cop considerando un numero num rampe di finestre in cui calcolare il parametro
+
+
+function [roa] = computation_metrics_high_density_EMG(col_bary,row_bary,fs,time_sec,num_rampe,transient_wind_sec)
+
+%  Define sampling frequency
+if nargin <3
+    fs=2048;
+    time_sec = 5;
+    num_rampe = 7;
+    transient_wind_sec = 4;
+elseif nargin <4
+    time_sec = 5;
+    num_rampe = 7;
+    transient_wind_sec = 4;
+elseif nargin <5
+    num_rampe = 7;
+    transient_wind_sec = 4;
+elseif nargin <6
+    transient_wind_sec = 4;
+end
+
+% define time window in samples
+time_wind = time_sec*fs;
+
+% length of the signal
+l_sig = length(row_bary);
+
+% Compute the samples of the first 20% of the signal after removing the two
+% transients
+windo_20_percent = floor((l_sig-((transient_wind_sec*2) *fs))/ (num_rampe-2)); % num_rampe- 2 because I am removing the two transients 
+
+% Raw coordinate mediolateral and anteroposterior of the RoA
+MLo = col_bary;
+APo = row_bary;
+
+% Calculate the mean in the first 20% of the activation period
+mean_ML = mean(MLo(transient_wind_sec*fs: (transient_wind_sec*fs + windo_20_percent)),'omitnan');
+mean_AP = mean(APo(transient_wind_sec*fs: (transient_wind_sec*fs + windo_20_percent)),'omitnan');
+
+% Coordinate removing the mean in the first 20% of the activation period
+ML = MLo - mean_ML;
+AP = APo - mean_AP;
+
+% The resultant distance (RD) is the vector distance from
+% the averaged RoA to each pair of points in the AP and ML time series
+RD = sqrt((AP).^2 + (ML).^2);
+
+
+% In the following there are three cases:
+% 1) time_sec of 20 seconds.  It will average the RoA parameters in a
+% window of 20 seconds at the beginning of the contraction and at the end
+% of the contraction. (i.e. 1% and 99%)
+% computation_metrics_high_density_EMG(col_bary,row_bary,fs,20,4,transient_wind_sec)
+
+% 2) time_sec of 10 seconds. It will average the RoA parameters in a
+% window of 10 seconds at the beginning, in the middle and at the end of
+% the contraction. (1%, 50% and 99%)
+% computation_metrics_high_density_EMG(col_bary,row_bary,fs,10,5,transient_wind_sec)
+
+% 3) time_sec of 5 seconds. It will average the RoA parameters in a
+% window of 5 seconds at the beginning, at 25%, at 50%, at 75% and at the end of
+% the contraction. (1%, 25%, 50%, 75% and 99%)
+% computation_metrics_high_density_EMG(col_bary,row_bary,fs,5,7,transient_wind_sec)
+
+% For each ramp
+for j = 1: num_rampe
+
+    if time_sec == 20
+        if j == 1
+            start_win = 1;
+            end_wind = start_win + transient_wind_sec*fs -1;
+        elseif j ==2
+            start_win = transient_wind_sec*fs +1 ;
+            end_wind = start_win + time_wind -1;
+        elseif j ==3
+            start_win = l_sig - (transient_wind_sec*fs) - time_wind -1;
+            end_wind = l_sig - (transient_wind_sec*fs) ;
+
+        elseif (num_rampe-j) == 0
+            start_win = l_sig - (transient_wind_sec*fs) +1;
+            end_wind = l_sig;
+        end
+
+    elseif time_sec == 10
+
+        if j == 1
+            start_win = 1;
+            end_wind = start_win + transient_wind_sec*fs  -1;
+        elseif j == 2
+            start_win = transient_wind_sec*fs;
+            end_wind = start_win + time_wind -1;
+        elseif j ==3
+            start_win = floor(l_sig/2) - ((time_sec/2)*fs);
+            end_wind = floor(l_sig/2) + ((time_sec/2)*fs);
+        elseif j == 4
+            start_win = l_sig - (transient_wind_sec*fs) - time_wind +1;
+            end_wind = l_sig - (transient_wind_sec*fs) ;
+
+        elseif (num_rampe-j) == 0
+            start_win = l_sig - (transient_wind_sec*fs) +1;
+            end_wind = l_sig;
+        end
+
+
+    elseif time_sec == 5
+        if j == 1
+            start_win = 1;
+            end_wind = start_win + transient_wind_sec*fs  -1;
+        elseif j == 2
+            start_win = transient_wind_sec*fs;
+            end_wind = start_win + time_wind -1;
+        elseif j ==3 
+            start_win = floor(l_sig/4) - ((time_sec/2)*fs); %(2.5*fs);
+            end_wind = floor(l_sig/4)  + ((time_sec/2)*fs); %(2.5*fs);
+        elseif j == 4
+          start_win = floor(l_sig/2) - ((time_sec/2)*fs); %(2.5*fs);
+            end_wind = floor(l_sig/2)  + ((time_sec/2)*fs); %(2.5*fs);
+
+        elseif j == 5
+            start_win = floor(l_sig*3/4) - ((time_sec/2)*fs); %(2.5*fs);
+            end_wind = floor(l_sig*3/4)  + ((time_sec/2)*fs); %(2.5*fs);
+
+        elseif j == 6
+            start_win = l_sig - (transient_wind_sec*fs) - time_wind +1;
+            end_wind = l_sig - (transient_wind_sec*fs) ;
+
+        elseif (num_rampe-j) == 0
+            start_win = l_sig - (transient_wind_sec*fs) +1;
+            end_wind = l_sig;
+        end
+    
+    end
+
+    % Extract the coordinates in the selected time window
+
+    AP_wind{j} = (APo(start_win:end_wind));
+    ML_wind{j} = (MLo(start_win:end_wind));
+    RD_wind{j} = RD(start_win:end_wind);
+
+    % compute the average and the coefficient of variation in the selected
+    % time window
+    AP_avg_in_rampe(j) = mean(APo(start_win:end_wind),'omitnan');
+    ML_avg_in_rampe(j) = mean(MLo(start_win:end_wind),'omitnan');
+    CoV_AP_rampe(j) = abs(std(APo(start_win:end_wind),'omitnan'))./abs(mean(APo(start_win:end_wind),'omitnan'));
+    CoV_ML_rampe(j) = abs(std(MLo(start_win:end_wind),'omitnan'))./abs(mean(MLo(start_win:end_wind),'omitnan'));
+    
+    % Compute the lenght of the selected time window in samples and in
+    % seconds
+    T(j) = length((start_win:end_wind))/fs;
+    N(j) = length((start_win:end_wind));
+
+    % Compute the standard deviation
+    s_AP(j) = sqrt((1/(N(j)-1))*sum(AP(start_win:end_wind).^2,'omitnan'));
+    s_ML(j) = sqrt((1/(N(j)-1))*sum(ML(start_win:end_wind).^2,'omitnan'));
+    
+    % Activation Intensity Spread
+    AIS(j) = sqrt(s_AP(j)^2 + s_ML(j)^2);
+
+    % Mean distance (MDIST) is the mean of the RD time series,
+    % and represents the average distance from the mean RoA
+    mean_dist(j)= (1/N(j)) .* sum(RD(start_win:end_wind),'omitnan'); % nansum(RD(start_win:end_wind))*(1/length(RD(start_win:end_wind)))
+
+    %The mean distance-AP (MDIST_AP)s the mean absolute value of the AP time series
+    % and represents the average AP distance from the mean RoA
+    mdist_AP(j) = (1/N(j)) .* sum(abs(AP(start_win:end_wind)),'omitnan');
+
+    mdist_ML(j) = (1/N(j)) .* sum(abs(ML(start_win:end_wind)),'omitnan');
+
+    %The rms distance (RDIST) from the mean RoA is the RMS value of the RD time series
+    rmsdist(j)=  sqrt(  (1/N(j)) .* sum((RD(start_win:end_wind).^2),'omitnan')  );
+
+    rmsdist_AP(j) = sqrt(  (1/N(j)).* sum(AP(start_win:end_wind).^2,'omitnan') )  ;  %sqrt(  mean(AP(start_win:end_wind).^2,'omitnan'))  ;
+
+    rmsdist_ML(j) = sqrt(  (1/N(j)).* sum(ML(start_win:end_wind).^2,'omitnan') )  ;  %sqrt(  mean(AP(start_win:end_wind).^2,'omitnan'))  ;
+
+    % AREE
+    % The 95% confidence circle area (AREA-CC) is the area of a circle
+    % with a radius equal to the one-sided 95% confidence limit of the RD time series.
+    
+    % Std of the RD rime series
+    RD_std(j)=   sqrt( (rmsdist(j).^2 ) - (mean_dist(j).^2) );
+
+    cc_area(j) = pi * ( (mean_dist(j) + (1.645 * RD_std(j))) .^2);
+
+    % The 95% confidence ellipse area (AREA-CE) is the area of the 95% bivariate confidence
+    % ellipse, which is expected to enclose approximately 95% of the points on the COP path.
+
+    xycov(j)=  (1/N(j)) * (sum ((AP(start_win:end_wind) .* ML(start_win:end_wind)) ,'omitnan'));
+
+    % compute variables for the computation of AREA-CE
+    aa(j) = rmsdist_AP(j);
+    bb(j) = rmsdist_ML(j);
+    cc(j) = xycov(j);
+
+    ce_area(j)=2*pi*3* (sqrt(  (aa(j).^2) .* (bb(j).^2) - (cc(j).^2)));
+
+
+    % Detrend the coordinates time series for the computation of the other
+    % metrics
+
+    AP_detr{1,j} =  detrend(APo(start_win:end_wind));
+    ML_detr{1,j} =  detrend(MLo(start_win:end_wind));
+
+end
+
+for j=1:length(AP_detr)
+
+    for i = 2:length(AP_detr{1,j})
+        % The total excursions (TOTEX) is the total length of the RoA path
+        array_totex{1,j}(i-1) = sqrt(  (AP_detr{1,j}(i)-AP_detr{1,j}(i-1) ).^2   +   (ML_detr{1,j}(i)-ML_detr{1,j}(i-1))  .^2);
+        
+        % Totex for AP and ML coordinates
+        array_totex_AP{1,j}(i-1) = abs( AP_detr{1,j}(i)-AP_detr{1,j}(i-1) );
+        array_totex_ML{1,j}(i-1) = abs( ML_detr{1,j}(i)-ML_detr{1,j}(i-1)) ;
+
+        % array for the computation of the sway area
+        array_sway{1,j}(i-1) = abs((AP_detr{1,j}(i) .* ML_detr{1,j}(i-1)) - (AP_detr{1,j}(i-1).* ML_detr{1,j}(i)) );
+    end
+
+
+    totex(j) = sum(array_totex{1,j},'omitnan');
+    totex_AP(j) = sum(array_totex_AP{1,j},'omitnan');
+    totex_ML(j) = sum(array_totex_ML{1,j},'omitnan');
+
+    % The mean velocity (MVELO) is the average velocity of the RoA in a
+    % defined time interval
+    mean_vel(j)= (1/T(j)) .* totex(j);
+    mean_vel_AP(j)= (1/T(j)) .* totex_AP(j);
+    mean_vel_ML(j)= (1/T(j)) .* totex_ML(j);
+
+    %calcolo sway area Sway area (AREA-SW) estimates the area enclosed by the RoA path per unit of time
+    sway(j) = sum(array_sway{1,j},'omitnan');
+    sway_area(j)= (1/ (2*T(j)) ) .* sum(array_sway{1,j},'omitnan');
+
+end
+
+
+%% Put everything in a structur called RoA
+roa = [];
+
+roa.mean_ML_initial = mean_ML;
+roa.mean_AP_initial = mean_AP;
+
+roa.AP_wind = AP_wind;
+roa.ML_wind = ML_wind;
+roa.RD_wind = RD_wind;
+
+roa.AP_rampe = AP_avg_in_rampe;
+roa.ML_rampe = ML_avg_in_rampe;
+roa.CoV_AP_rampe = CoV_AP_rampe;
+roa.CoV_ML_rampe = CoV_ML_rampe;
+roa.std_AP = s_AP;
+roa.std_ML = s_ML;
+roa.AIS = AIS;
+
+roa.APo = APo;
+roa.MLo = MLo;
+roa.RD = RD;
+
+roa.mean_vel = mean_vel;
+roa.mean_vel_AP = mean_vel_AP;
+roa.mean_vel_ML = mean_vel_ML;
+
+roa.mean_dist = mean_dist;
+roa.mean_dist_AP = mdist_AP;
+roa.mean_dist_ML = mdist_ML;
+
+roa.rms_dist = rmsdist;
+roa.rms_dist_AP = rmsdist_AP;
+roa.rms_dist_ML = rmsdist_ML;
+
+roa.cc_area = cc_area;
+roa.ce_area = ce_area;
+roa.sway_area = sway_area;
+
+
+roa.totex = totex;
+roa.totex_AP = totex_AP;
+roa.totex_ML = totex_ML;
+
+roa.array_sway = array_sway;
+roa.array_totex = array_totex;
+roa.array_totex_AP = array_totex_AP;
+roa.array_totex_ML = array_totex_ML;
+
+
+end
 
