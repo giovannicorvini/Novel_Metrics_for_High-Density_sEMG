@@ -42,9 +42,7 @@
 % 21/08/2024 
 % For any information, write to giovanni.corvini@uniroma3.it
  
-%% Funzione per calcolare i parametri del Cop considerando un numero num rampe di finestre in cui calcolare il parametro
-
-
+%% Function
 function [roa] = computation_metrics_high_density_EMG(col_bary,row_bary,fs,time_sec,num_rampe,transient_wind_sec)
 
 %  Define sampling frequency
